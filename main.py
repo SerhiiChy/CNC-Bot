@@ -35,33 +35,32 @@ def handle_message(message):
         return  # игнорируем сообщения от ботов
 
     user_id = message.from_user.id
-    text = message.text or ""
+    text = message.text  # может быть None
 
     # Бот отвечает:
-    # 1) любому, кто пишет через /
+    # 1) любому через /
     # 2) любому сообщению от пользователей из SPAMMER_IDS
-    if not (text.startswith("/") or user_id in SPAMMER_IDS):
+    if (text and text.startswith("/")) or (user_id in SPAMMER_IDS):
+        try:
+            completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": text or ""}],
+                model="llama-3.1-8b-instant",
+            )
+
+            choice = completion.choices[0] if completion.choices else None
+            content = getattr(choice.message, "content", None) if choice else None
+            reply = content or "⚠️ Groq вернул пустой ответ"
+
+            bot.send_message(message.chat.id, reply)
+            print(f"✅ Ответ отправлен пользователю {user_id}")
+
+        except Exception as e:
+            print("Ошибка Groq:", e)
+            bot.send_message(message.chat.id, "⚠️ Ошибка обработки сообщения")
+
+    else:
+        # все остальные игнорируются
         return
-
-    try:
-        completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": text}],
-            model="llama-3.1-8b-instant",
-        )
-
-        choice = completion.choices[0] if completion.choices else None
-        content = getattr(choice.message, "content", None) if choice else None
-
-        if content:
-            bot.send_message(message.chat.id, content)
-        else:
-            bot.send_message(message.chat.id, "⚠️ Groq вернул пустой ответ")
-
-        print("✅ Ответ отправлен")
-
-    except Exception as e:
-        print("Ошибка Groq:", e)
-        bot.send_message(message.chat.id, "⚠️ Ошибка обработки сообщения")
 
 # -------------------------
 # Webhook endpoint
