@@ -34,7 +34,7 @@ def webhook():
     return "OK", 200
 
 # --- Health check ---
-@app.route("/", methods=["GET"])
+@app.route("/", methods=["GET", "HEAD"])
 def health():
     return "OK", 200
 
