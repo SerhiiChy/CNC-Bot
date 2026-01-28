@@ -12,6 +12,14 @@ WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")  # Публичный URL Re
 PORT = int(os.environ.get("PORT", 8080))       # Порт Render
 
 # -------------------------
+# ID пользователей, на которых бот реагирует всегда
+# -------------------------
+SPAMMER_IDS = {
+    1630418047,   # поменяй на нужные user_id
+    987654321
+}
+
+# -------------------------
 # Инициализация
 # -------------------------
 bot = telebot.TeleBot(TOKEN)
@@ -26,14 +34,21 @@ def handle_message(message):
     if message.from_user.is_bot:
         return  # игнорируем сообщения от ботов
 
+    user_id = message.from_user.id
+    text = message.text or ""
+
+    # Бот отвечает:
+    # 1) любому, кто пишет через /
+    # 2) любому сообщению от пользователей из SPAMMER_IDS
+    if not (text.startswith("/") or user_id in SPAMMER_IDS):
+        return
+
     try:
-        # Отправка текста пользователя в Groq
         completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": message.text}],
-            model="llama-3.1-8b-instant",  # модель
+            messages=[{"role": "user", "content": text}],
+            model="llama-3.1-8b-instant",
         )
 
-        # Получаем ответ
         choice = completion.choices[0] if completion.choices else None
         content = getattr(choice.message, "content", None) if choice else None
 
