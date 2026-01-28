@@ -1,28 +1,19 @@
 import os
 import telebot
 from groq import Groq
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
+from flask import Flask, request
 
-# Цей блок необхідний Render для перевірки працездатності порту
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'OK')
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+GROQ_KEY = os.environ.get("GROQ_API_KEY")
+PORT = int(os.environ.get("PORT", 8080))
+WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")  # Render даёт автоматически
 
-def run_health_check_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
+bot = telebot.TeleBot(TOKEN)
+client = Groq(api_key=GROQ_KEY)
 
-# Запуск сервера перевірки у фоновому потоці
-threading.Thread(target=run_health_check_server, daemon=True).start()
+app = Flask(__name__)
 
-# Основний код бота
-bot = telebot.TeleBot(os.environ.get('TELEGRAM_TOKEN'))
-client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
-
+# --- Telegram handler ---
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     try:
@@ -32,7 +23,24 @@ def handle_message(message):
         )
         bot.reply_to(message, completion.choices[0].message.content)
     except Exception as e:
-        print(f"Error: {e}")
+        bot.reply_to(message, "⚠️ Помилка обробки повідомлення")
+        print(e)
 
-print("Бот запущений!")
-bot.infinity_polling()
+# --- Webhook endpoint ---
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = telebot.types.Update.de_json(request.stream.read().decode("utf-8"))
+    bot.process_new_updates([update])
+    return "OK", 200
+
+# --- Health check ---
+@app.route("/", methods=["GET"])
+def health():
+    return "OK", 200
+
+if __name__ == "__main__":
+    bot.remove_webhook()
+    bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+    print("✅ Webhook встановлено")
+    app.run(host="0.0.0.0", port=PORT)
+
