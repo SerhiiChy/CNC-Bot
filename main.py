@@ -19,26 +19,41 @@ client = Groq(api_key=GROQ_KEY)
 app = Flask(__name__)
 
 # -------------------------
-# Обработчик сообщений Telegram
+# Обработчик команды /ask
 # -------------------------
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
+@bot.message_handler(commands=['ask'])
+def handle_ask(message):
+    # Игнорируем свои сообщения
+    if message.from_user.is_bot:
+        return
+
+    # Берем текст после команды /ask
+    text = message.text.replace('/ask', '').strip()
+    if not text:
+        bot.send_message(message.chat.id, "⚠️ Напиши вопрос после /ask")
+        return
+
     try:
         # Отправка текста пользователя в Groq
         completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": message.text}],
-            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": text}],
+            model="llama-3.1-8b-instant",  # рабочая модель
         )
-        # Проверка ответа
-        if completion.choices and completion.choices[0].message.content:
-            bot.reply_to(message, completion.choices[0].message.content)
+
+        # Безопасная проверка ответа
+        choice = completion.choices[0] if completion.choices else None
+        content = getattr(choice.message, "content", None) if choice else None
+
+        if content:
+            bot.send_message(message.chat.id, content)
         else:
-            bot.reply_to(message, "⚠️ Groq вернул пустой ответ")
+            bot.send_message(message.chat.id, "⚠️ Groq вернул пустой ответ")
+
         print("✅ Ответ отправлен")
+
     except Exception as e:
-        # Логируем ошибку в Render
         print("Ошибка Groq:", e)
-        bot.reply_to(message, "⚠️ Ошибка обработки сообщения")
+        bot.send_message(message.chat.id, "⚠️ Ошибка обработки сообщения")
 
 # -------------------------
 # Webhook endpoint
@@ -69,4 +84,5 @@ if __name__ == "__main__":
 
     # Запуск Flask
     app.run(host="0.0.0.0", port=PORT)
+
 
