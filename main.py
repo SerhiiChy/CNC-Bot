@@ -27,7 +27,7 @@ def handle_message(message):
         # Отправка текста пользователя в Groq
         completion = client.chat.completions.create(
             messages=[{"role": "user", "content": message.text}],
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
         )
         # Проверка ответа
         if completion.choices and completion.choices[0].message.content:
