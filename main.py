@@ -1,7 +1,7 @@
 import os
 import telebot
 from groq import Groq
-from flask import Flask, request, jsonify
+from flask import Flask, request
 
 # -------------------------
 # Переменные окружения
@@ -23,49 +23,46 @@ app = Flask(__name__)
 # -------------------------
 @bot.message_handler(commands=['ask'])
 def handle_ask(message):
-    # Игнорируем свои сообщения
     if message.from_user.is_bot:
         return
 
-    # Берем текст после команды /ask
+    # Текст после /ask
     text = message.text.replace('/ask', '').strip()
     if not text:
-        bot.send_message(message.chat.id, "⚠️ Напиши вопрос после /ask")
+        bot.send_message(message.chat.id, "⚠️ Напиши питання після /ask")
         return
 
     try:
-        # Отправка текста пользователя в Groq
         completion = client.chat.completions.create(
             messages=[{"role": "user", "content": text}],
-            model="llama-3.1-8b-instant",  # рабочая модель
+            model="llama-3.1-8b-instant",
         )
 
-        # Безопасная проверка ответа
         choice = completion.choices[0] if completion.choices else None
         content = getattr(choice.message, "content", None) if choice else None
 
         if content:
             bot.send_message(message.chat.id, content)
         else:
-            bot.send_message(message.chat.id, "⚠️ Groq вернул пустой ответ")
+            bot.send_message(message.chat.id, "⚠️ Groq вернув пустий відповідь")
 
         print("✅ Ответ отправлен")
-
     except Exception as e:
-        print("Ошибка Groq:", e)
-        bot.send_message(message.chat.id, "⚠️ Ошибка обработки сообщения")
+        print("Помилка Groq:", e)
+        bot.send_message(message.chat.id, "⚠️ Сталася помилка при обробці повідомлення")
 
 # -------------------------
 # Webhook endpoint
 # -------------------------
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = telebot.types.Update.de_json(request.stream.read().decode("utf-8"))
+    update_json = request.get_json(force=True)
+    update = telebot.types.Update.de_json(update_json)
     bot.process_new_updates([update])
     return "OK", 200
 
 # -------------------------
-# Health check (для Render)
+# Health check для Render
 # -------------------------
 @app.route("/", methods=["GET", "HEAD"])
 def health():
@@ -75,12 +72,10 @@ def health():
 # Запуск сервиса
 # -------------------------
 if __name__ == "__main__":
-    # Удаляем старый webhook Telegram
+    # Удаляем старый webhook
     bot.delete_webhook(drop_pending_updates=True)
-
     # Устанавливаем новый webhook
     bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
     print("✅ Webhook установлен")
-
     # Запуск Flask
     app.run(host="0.0.0.0", port=PORT)
