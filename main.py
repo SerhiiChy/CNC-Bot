@@ -37,7 +37,7 @@ def handle_ask(message):
         # Отправка текста пользователя в Groq
         completion = client.chat.completions.create(
             messages=[{"role": "user", "content": text}],
-            model="llama-3.1-8b-instant",  # рабочая модель
+            model="groq/compound",  # рабочая модель
         )
 
         # Безопасная проверка ответа
