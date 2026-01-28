@@ -19,41 +19,43 @@ client = Groq(api_key=GROQ_KEY)
 app = Flask(__name__)
 
 # -------------------------
-# Обработчик команды /ask
+# Тригер-имя бота
 # -------------------------
-@bot.message_handler(commands=['ask'])
-def handle_ask(message):
-    # Игнорируем свои сообщения
-    if message.from_user.is_bot:
-        return
+TRIGGER_NAME = "Шпиндель:"
 
-    # Берем текст после команды /ask
-    text = message.text.replace('/ask', '').strip()
+# -------------------------
+# Обработчик сообщений с триггером
+# -------------------------
+@bot.message_handler(func=lambda message: message.text and message.text.startswith(TRIGGER_NAME))
+def handle_trigger(message):
+    if message.from_user.is_bot:
+        return  # игнорируем сообщения от других ботов
+
+    # убираем триггер из текста
+    text = message.text[len(TRIGGER_NAME):].strip()
     if not text:
-        bot.send_message(message.chat.id, "⚠️ Напиши вопрос после /ask")
+        bot.send_message(message.chat.id, f"⚠️ Напиши питання після '{TRIGGER_NAME}'")
         return
 
     try:
-        # Отправка текста пользователя в Groq
         completion = client.chat.completions.create(
             messages=[{"role": "user", "content": text}],
-            model="llama-3.1-8b-instant",  # рабочая модель
+            model="llama-3.1-8b-instant",
         )
 
-        # Безопасная проверка ответа
         choice = completion.choices[0] if completion.choices else None
         content = getattr(choice.message, "content", None) if choice else None
 
         if content:
             bot.send_message(message.chat.id, content)
         else:
-            bot.send_message(message.chat.id, "⚠️ Groq вернул пустой ответ")
+            bot.send_message(message.chat.id, "⚠️ Groq вернув пусту відповідь")
 
         print("✅ Ответ отправлен")
 
     except Exception as e:
-        print("Ошибка Groq:", e)
-        bot.send_message(message.chat.id, "⚠️ Ошибка обработки сообщения")
+        print("Помилка Groq:", e)
+        bot.send_message(message.chat.id, "⚠️ Сталася помилка при обробці повідомлення")
 
 # -------------------------
 # Webhook endpoint
@@ -84,5 +86,3 @@ if __name__ == "__main__":
 
     # Запуск Flask
     app.run(host="0.0.0.0", port=PORT)
-
-
