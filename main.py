@@ -4,36 +4,35 @@ from groq import Groq
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-# ЦЕЙ БЛОК ОБМАНЮЄ RENDER, ЩОБ ВІН НЕ ВИМИКАВСЯ
-class HealthCheck(BaseHTTPRequestHandler):
+# Цей блок необхідний Render для перевірки працездатності порту
+class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b'OK')
 
-def run_server():
-    # Беремо порт, який вимагає Render
+def run_health_check_server():
     port = int(os.environ.get("PORT", 8080))
-    httpd = HTTPServer(('0.0.0.0', port), HealthCheck)
-    httpd.serve_forever()
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
 
-# Запускаємо сервер-обманку у фоні
-threading.Thread(target=run_server, daemon=True).start()
+# Запуск сервера перевірки у фоновому потоці
+threading.Thread(target=run_health_check_server, daemon=True).start()
 
-# ТУТ ТВІЙ БОТ
+# Основний код бота
 bot = telebot.TeleBot(os.environ.get('TELEGRAM_TOKEN'))
 client = Groq(api_key=os.environ.get('GROQ_API_KEY'))
 
-@bot.message_handler(func=lambda m: True)
-def chat(message):
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
     try:
-        res = client.chat.completions.create(
+        completion = client.chat.completions.create(
             messages=[{"role": "user", "content": message.text}],
-            model="llama3-8b-8192"
+            model="llama3-8b-8192",
         )
-        bot.reply_to(message, res.choices[0].message.content)
-    except Exception:
-        pass
+        bot.reply_to(message, completion.choices[0].message.content)
+    except Exception as e:
+        print(f"Error: {e}")
 
-print("Бот готовий!")
+print("Бот запущений!")
 bot.infinity_polling()
