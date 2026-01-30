@@ -3,61 +3,72 @@ import telebot
 from groq import Groq
 from flask import Flask, request
 
+# -------------------------
+# Переменные окружения
+# -------------------------
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_KEY = os.environ.get("GROQ_API_KEY")
 WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL")
 PORT = int(os.environ.get("PORT", 8080))
 
-TRIGGERS = ["шпиндель", "cnc", "gcode", "g-код", "чпу"]
-
+# -------------------------
+# Инициализация
+# -------------------------
 bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 client = Groq(api_key=GROQ_KEY)
 app = Flask(__name__)
 
-def reply_groq(message, text):
-    completion = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[
-            {
-                "role": "system",
-                "content": (
-                    "Ти чат-бот про ЧПУ та верстати. "
-                    "Відповідай коротко (1–3 речення), по суті. "
-                    "Додавай легкий технічний гумор."
-                )
-            },
-            {"role": "user", "content": text}
-        ],
-        max_tokens=120,
-        temperature=0.8
-    )
-
-    content = completion.choices[0].message.content
-    bot.send_message(message.chat.id, content)
-
+# -------------------------
+# Обработчик всех сообщений
+# -------------------------
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     if message.from_user.is_bot:
-        return
+        return  # игнорируем сообщения от ботов
 
-    text = message.text
+    text = getattr(message, "text", None)
     if not text:
+        bot.send_message(message.chat.id, "🤖 Я текст люблю. Картинки — ні 🙂")
         return
 
-    chat_type = message.chat.type
-    text_l = text.lower()
+    try:
+        completion = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Ти чат-бот про ЧПУ, верстати та виробництво. "
+                        "Відповідай КОРОТКО (1–3 речення), але завершено. "
+                        "Без списків і без води. "
+                        "Додавай легкий технічний гумор або іронію, якщо доречно."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": text
+                }
+            ],
+            max_tokens=120,
+            temperature=0.8
+        )
 
-    # приват — завжди відповідаємо
-    if chat_type == "private":
-        reply_groq(message, text)
-        return
+        choice = completion.choices[0] if completion.choices else None
+        content = getattr(choice.message, "content", None) if choice else None
 
-    # група — тільки / або тригери
-    if chat_type in ("group", "supergroup"):
-        if text.startswith("/") or any(t in text_l for t in TRIGGERS):
-            reply_groq(message, text)
-        return
+        if content:
+            bot.send_message(message.chat.id, content)
+            print(f"✅ Ответ отправлен")
+        else:
+            bot.send_message(message.chat.id, "⚠️ Мозок ЧПУ завис, спробуй ще раз 😅")
 
+    except Exception as e:
+        print("Ошибка Groq:", e)
+        bot.send_message(message.chat.id, "⚠️ Щось пішло не так. Навіть верстат так не лагає.")
+
+# -------------------------
+# Webhook endpoint
+# -------------------------
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = telebot.types.Update.de_json(
@@ -66,11 +77,18 @@ def webhook():
     bot.process_new_updates([update])
     return "OK", 200
 
+# -------------------------
+# Health check
+# -------------------------
 @app.route("/", methods=["GET", "HEAD"])
 def health():
     return "OK", 200
 
+# -------------------------
+# Запуск
+# -------------------------
 if __name__ == "__main__":
     bot.delete_webhook(drop_pending_updates=True)
     bot.set_webhook(url=f"{WEBHOOK_URL}/{TOKEN}")
+    print("✅ Webhook установлен")
     app.run(host="0.0.0.0", port=PORT)
